@@ -1,7 +1,7 @@
 /** Workspace-scoped analysis webview panel. */
 
 import * as vscode from 'vscode';
-import { findCurrentWorkspace, discoverWorkspaces } from '../core/discovery';
+import { findCurrentWorkspace, discoverWorkspaces, getWorkspaceStorageRoots } from '../core/discovery';
 import { parseAllFiles, flattenEvents, computeKpis, computeModelStats, computeDailyStats, computeWorkspaceStats } from '../core/aggregator';
 import { computeRepoAttributionStats, discoverRepoDescriptors, RepoAttributionStats } from '../core/repoAttribution';
 import { enableCostEstimator } from '../features/costEstimator/flags';
@@ -13,6 +13,7 @@ import {
 
 export class WorkspacePanel {
   public static currentPanel: WorkspacePanel | undefined;
+  private static storageRoots?: string[];
   private readonly panel: vscode.WebviewPanel;
   private disposables: vscode.Disposable[] = [];
   private disposed = false;
@@ -46,7 +47,8 @@ export class WorkspacePanel {
     );
   }
 
-  public static async refresh(): Promise<void> {
+  public static async refresh(storageRoots?: string[]): Promise<void> {
+    WorkspacePanel.storageRoots = storageRoots ?? WorkspacePanel.storageRoots ?? getWorkspaceStorageRoots(vscode.env.appName);
     if (WorkspacePanel.currentPanel) {
       await WorkspacePanel.currentPanel.loadData();
     }
@@ -95,7 +97,8 @@ export class WorkspacePanel {
 
     const wsFileUri = vscode.workspace.workspaceFile?.toString();
     const folderPaths = folders.map(f => f.uri.fsPath);
-    const ws = await findCurrentWorkspace(wsFileUri, folderPaths);
+    WorkspacePanel.storageRoots ??= getWorkspaceStorageRoots(vscode.env.appName);
+    const ws = await findCurrentWorkspace(wsFileUri, folderPaths, WorkspacePanel.storageRoots);
     if (!ws) {
       const searched = wsFileUri
         ? `workspace file: ${vscode.workspace.workspaceFile!.fsPath}`
@@ -129,6 +132,7 @@ export class WorkspacePanel {
 /** Global dashboard webview panel. */
 export class DashboardPanel {
   public static currentPanel: DashboardPanel | undefined;
+  private static storageRoots?: string[];
   private readonly panel: vscode.WebviewPanel;
   private disposables: vscode.Disposable[] = [];
   private disposed = false;
@@ -162,7 +166,8 @@ export class DashboardPanel {
     );
   }
 
-  public static async refresh(): Promise<void> {
+  public static async refresh(storageRoots?: string[]): Promise<void> {
+    DashboardPanel.storageRoots = storageRoots ?? DashboardPanel.storageRoots ?? getWorkspaceStorageRoots(vscode.env.appName);
     if (DashboardPanel.currentPanel) {
       await DashboardPanel.currentPanel.loadData();
     }
@@ -203,7 +208,8 @@ export class DashboardPanel {
     const autoRefreshSeconds = cfg.get<number>('dashboard.autoRefreshSeconds', 0);
     const showDebugLogBanner = !isCopilotDebugLogEnabled();
 
-    const workspaces = await discoverWorkspaces();
+    DashboardPanel.storageRoots ??= getWorkspaceStorageRoots(vscode.env.appName);
+    const workspaces = await discoverWorkspaces(DashboardPanel.storageRoots);
     if (workspaces.length === 0) {
       this.setHtml(getDashboardHtml(undefined, undefined, undefined, undefined, 'No Copilot session data found.', autoRefreshSeconds, 0, showDebugLogBanner));
       return;
